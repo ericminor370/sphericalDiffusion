@@ -1,3 +1,5 @@
+function flatGenSphereSwift(userMult,tinyMult)
+
 % Create a logical image of a circle with specified
 % diameter, center, and image size.
 % First create the image.
@@ -6,7 +8,7 @@
 startData = load('startData');
 distRadii = sort(startData.radii);
 mult = 1/startData.sFract;
-userMult = 1.2; %additional multiplier to account for non detected islands
+%userMult = 1.2; %additional multiplier to account for non detected islands
 %multFract = 1/startData.sFract - mult;
 %numIslands = floor(lengt(distRadii*mult));
 res = 10;
@@ -21,6 +23,11 @@ radii=[];
 binCents = (edges(1:end-1)+edges(2:end))/2;
 binCents = binCents(end:-1:1);
 N = floor(N(end:-1:1)*mult*userMult);
+%%%%%%%%%%%%%exp
+binCents = [binCents,3*18];
+N=[N,N(end-1)*tinyMult];
+%%%%%%%%%%%%%%
+
 numBins = length(binCents);
 
 %imageSizeX = radius*2;
@@ -80,11 +87,15 @@ while exist(filename,'file') == 2
 end
 save(filename,'fImage','centers','radii','userMult','bubbleRadius');
 
-
+end
 
 function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSizeTheta,imgSizePhi,numBins,res,bubbleRadius,X,Y,validStack,binCents)
     %valid = gpuArray(ones(imgSizeTheta,imgSizePhi,'logical'));
-    
+    tic
+    %[seed,fail] = getSeedGPU(validStack,binPos,X,Y);
+    [seed,fail] = getSeed(validStack,binPos,imgSizeTheta,imgSizePhi);
+    toc
+    %{
     valid = gather(validStack(:,:,binPos));
     numValid = sum(sum(valid));
     if numValid>0
@@ -102,26 +113,62 @@ function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSiz
         end
 
         seed = datasample(validPixels,1,1);
-        
+        %}
+    
+    if fail == 0
+        tic
         for i=1:numBins
             validStack(:,:,i) = arrayfun(@drawValidCircleSphereGPU,validStack(:,:,i),X,Y,seed(1),seed(2),binCents(binPos)+binCents(i)+1,res,bubbleRadius);
         end
-        
+        toc
         
 
         %fImage = arrayfun(@drawCircleSphereGPU,fImage,X,Y,seed(1),seed(2),radius,res,bubbleRadius);
         centers = [centers;seed];
         radii = [radii;binCents(binPos)];
+
+    end
+
+end
+
+function [seed,fail] = getSeedGPU(validStack,binPos,X,Y)
+
+    valid = validStack(:,:,binPos);
+    validList = [X(valid),Y(valid)];
+    if ~isempty(validList)
+    	seed = datasample(validList,1,1);
         fail = 0;
     else
+        seed = [1,1];
         fail = 1;
     end
 
 end
 
+function [seed,fail] = getSeed(validStack,binPos,imgSizeTheta,imgSizePhi)
 
+    valid = gather(validStack(:,:,binPos));
+    numValid = sum(sum(valid));
+    
+        %imshow(valid)
+        validPixels = zeros(numValid,2);
+        index = 1;
+        for i=1:imgSizeTheta
+            for j=1:imgSizePhi
+                if valid(i,j) == 1
+                    validPixels(index,1) = i;
+                    validPixels(index,2) = j;
+                    index=index+1;
+                end
+            end
+        end
+        if ~isempty(validPixels)
+            seed = datasample(validPixels,1,1);
+            fail = 0;
+        else
+            seed = [1,1];
+            fail = 1;
+        end
 
-
-
-
+end
 

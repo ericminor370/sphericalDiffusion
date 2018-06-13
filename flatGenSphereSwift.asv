@@ -1,3 +1,5 @@
+function flatGenSphereSwift(userMult,tinyMult)
+
 % Create a logical image of a circle with specified
 % diameter, center, and image size.
 % First create the image.
@@ -6,7 +8,7 @@
 startData = load('startData');
 distRadii = sort(startData.radii);
 mult = 1/startData.sFract;
-userMult = 1.1; %additional multiplier to account for non detected islands
+%userMult = 1.2; %additional multiplier to account for non detected islands
 %multFract = 1/startData.sFract - mult;
 %numIslands = floor(lengt(distRadii*mult));
 res = 10;
@@ -21,6 +23,11 @@ radii=[];
 binCents = (edges(1:end-1)+edges(2:end))/2;
 binCents = binCents(end:-1:1);
 N = floor(N(end:-1:1)*mult*userMult);
+%%%%%%%%%%%%%exp
+binCents = [binCents,3*18];
+N=[N,N(end-1)*tinyMult];
+%%%%%%%%%%%%%%
+
 numBins = length(binCents);
 
 %imageSizeX = radius*2;
@@ -50,11 +57,14 @@ counter = 0;
 failj = 0;
 faili = 0;
 first = 1;
+totalIslands = sum(N);
+
 for j=1:numBins
     for i=1:N(j)
         %imshow(fImage)
         [centers,radii,validStack,fail] = addIsland(j,centers,radii,imgSizeTheta,imgSizePhi,numBins,res,bubbleRadius,X,Y,validStack,binCents);
         counter = counter+1;
+        counter/totalIslands
         if fail&&first
             failj = j;
             faili = i;
@@ -73,15 +83,18 @@ i = 1;
 filename = strcat('startConfig',num2str(i),'.mat');
 while exist(filename,'file') == 2
     i = i+1;
-    filename = strcat('startConfig',num2str(i));
+    filename = strcat('startConfig',num2str(i),'.mat');
 end
-save(filename,'fImage','centers','radii',userMu);
+save(filename,'fImage','centers','radii','userMult','bubbleRadius');
 
-
+end
 
 function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSizeTheta,imgSizePhi,numBins,res,bubbleRadius,X,Y,validStack,binCents)
     %valid = gpuArray(ones(imgSizeTheta,imgSizePhi,'logical'));
-    
+    tic
+    [seed,fail] = getSeedGPU(validStack,binPos,X,Y);
+    toc
+    %{
     valid = gather(validStack(:,:,binPos));
     numValid = sum(sum(valid));
     if numValid>0
@@ -99,26 +112,48 @@ function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSiz
         end
 
         seed = datasample(validPixels,1,1);
-        
+        %}
+    if fail == 0
+        tic
         for i=1:numBins
             validStack(:,:,i) = arrayfun(@drawValidCircleSphereGPU,validStack(:,:,i),X,Y,seed(1),seed(2),binCents(binPos)+binCents(i)+1,res,bubbleRadius);
         end
-        
+        toc
         
 
         %fImage = arrayfun(@drawCircleSphereGPU,fImage,X,Y,seed(1),seed(2),radius,res,bubbleRadius);
         centers = [centers;seed];
         radii = [radii;binCents(binPos)];
+
+    end
+
+end
+
+function [seed,fail] = getSeedGPU(validStack,binPos,X,Y)
+
+    valid = validStack(:,:,binPos);
+    validList = [X(valid),Y(valid)];
+    if ~isempty(validList)
+    	seed = datasample(validList,1,1);
         fail = 0;
     else
+        seed = [1,1];
         fail = 1;
     end
 
 end
 
+function [seed,fail] = getSeed(validStack,binPos,X,Y)
 
+    valid = validStack(:,:,binPos);
+    validList = [X(valid),Y(valid)];
+    if ~isempty(validList)
+    	seed = datasample(validList,1,1);
+        fail = 0;
+    else
+        seed = [1,1];
+        fail = 1;
+    end
 
-
-
-
+end
 
