@@ -59,6 +59,17 @@ faili = 0;
 first = 1;
 totalIslands = sum(N);
 
+centers = double(centers);
+radii = double(radii);
+imgSizeTheta = uint32(imgSizeTheta);
+imgSizePhi = uint32(imgSizePhi);
+numBins = uint32(numBins);
+res = uint32(res);
+bubbleRadius = uint32(bubbleRadius);
+X = uint32(X);
+Y = uint32(Y);
+binCents = double(binCents);
+
 for j=1:numBins
     for i=1:N(j)
         %imshow(fImage)
@@ -91,9 +102,10 @@ end
 
 function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSizeTheta,imgSizePhi,numBins,res,bubbleRadius,X,Y,validStack,binCents)
     %valid = gpuArray(ones(imgSizeTheta,imgSizePhi,'logical'));
-    tic
-    [seed,fail] = getSeedGPU(validStack,binPos,X,Y);
-    toc
+    %tic
+    %[seed,fail] = getSeedGPU(validStack,binPos,X,Y);
+    [seed,fail] = getSeed(validStack,binPos,imgSizeTheta,imgSizePhi);
+    %toc
     %{
     valid = gather(validStack(:,:,binPos));
     numValid = sum(sum(valid));
@@ -113,12 +125,13 @@ function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSiz
 
         seed = datasample(validPixels,1,1);
         %}
+    
     if fail == 0
-        tic
+        %tic
         for i=1:numBins
             validStack(:,:,i) = arrayfun(@drawValidCircleSphereGPU,validStack(:,:,i),X,Y,seed(1),seed(2),binCents(binPos)+binCents(i)+1,res,bubbleRadius);
         end
-        toc
+        %toc
         
 
         %fImage = arrayfun(@drawCircleSphereGPU,fImage,X,Y,seed(1),seed(2),radius,res,bubbleRadius);
@@ -143,17 +156,30 @@ function [seed,fail] = getSeedGPU(validStack,binPos,X,Y)
 
 end
 
-function [seed,fail] = getSeed(validStack,binPos,X,Y)
+function [seed,fail] = getSeed(validStack,binPos,imgSizeTheta,imgSizePhi)
 
-    valid = validStack(:,:,binPos);
-    validList = [X(valid),Y(valid)];
-    if ~isempty(validList)
-    	seed = datasample(validList,1,1);
-        fail = 0;
-    else
-        seed = [1,1];
-        fail = 1;
-    end
+    valid = gather(validStack(:,:,binPos));
+    numValid = sum(sum(valid));
+    
+        %imshow(valid)
+        validPixels = zeros(numValid,2,'double');
+        index = 1;
+        for i=1:imgSizeTheta
+            for j=1:imgSizePhi
+                if valid(i,j) == 1
+                    validPixels(index,1) = i;
+                    validPixels(index,2) = j;
+                    index=index+1;
+                end
+            end
+        end
+        if ~isempty(validPixels)
+            seed = datasample(validPixels,1,1);
+            fail = 0;
+        else
+            seed = [1,1];
+            fail = 1;
+        end
 
 end
 

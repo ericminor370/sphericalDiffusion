@@ -59,6 +59,17 @@ faili = 0;
 first = 1;
 totalIslands = sum(N);
 
+centers = double(centers);
+radii = double(radii);
+imgSizeTheta = double(imgSizeTheta);
+imgSizePhi = double(imgSizePhi);
+numBins = double(numBins);
+res = double(res);
+bubbleRadius = single(bubbleRadius);
+X = double(X);
+Y = double(Y);
+binCents = double(binCents);
+
 for j=1:numBins
     for i=1:N(j)
         %imshow(fImage)
@@ -91,10 +102,10 @@ end
 
 function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSizeTheta,imgSizePhi,numBins,res,bubbleRadius,X,Y,validStack,binCents)
     %valid = gpuArray(ones(imgSizeTheta,imgSizePhi,'logical'));
-    tic
+    %tic
     %[seed,fail] = getSeedGPU(validStack,binPos,X,Y);
     [seed,fail] = getSeed(validStack,binPos,imgSizeTheta,imgSizePhi);
-    toc
+    %toc
     %{
     valid = gather(validStack(:,:,binPos));
     numValid = sum(sum(valid));
@@ -116,11 +127,11 @@ function [centers,radii,validStack,fail] = addIsland(binPos,centers,radii,imgSiz
         %}
     
     if fail == 0
-        tic
+        %tic
         for i=1:numBins
             validStack(:,:,i) = arrayfun(@drawValidCircleSphereGPU,validStack(:,:,i),X,Y,seed(1),seed(2),binCents(binPos)+binCents(i)+1,res,bubbleRadius);
         end
-        toc
+        %toc
         
 
         %fImage = arrayfun(@drawCircleSphereGPU,fImage,X,Y,seed(1),seed(2),radius,res,bubbleRadius);
@@ -151,7 +162,7 @@ function [seed,fail] = getSeed(validStack,binPos,imgSizeTheta,imgSizePhi)
     numValid = sum(sum(valid));
     
         %imshow(valid)
-        validPixels = zeros(numValid,2);
+        validPixels = zeros(numValid,2,'double');
         index = 1;
         for i=1:imgSizeTheta
             for j=1:imgSizePhi

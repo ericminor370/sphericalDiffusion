@@ -1,41 +1,21 @@
-data = load('startConfig3.mat');
+data = load('startConfig16.mat');
 particles = (data.centers./res)*(2*pi/360);
 radii = data.radii;
 
 
 sphereRadius = data.bubbleRadius;
 scale = lScale(sphereRadius);
-%particles = rand(10000,2);
-%density = 80;
-%div = 1/density;
-%numStart = (density-1)*density;
-%particles = zeros(numStart,2);
 past = [];
-%radii = ones(numStart,1)*30;
 time = 130;
 stepSize = 1;
-
 radius = zeros(time/stepSize,1);
+radius2 = zeros(time/stepSize,1);
 
 index=1;
-%{
-for i=div:div:1-div
-    for j=0:div:1-div
-        particles(index,1) = i;
-        particles(index,2) = j;
-        index = index+1;
-    end
-end
 
-particles(:,1) = particles(:,1)*pi;
-particles(:,2) = particles(:,2)*2*pi;
-%}
-%tic
 for j=1:stepSize:time
     j
     past = [past;particles];
-    %[particles,radii] =
-    %step(particles,radii,scale,sphereRadius,stepSize)
     numParticles = length(particles);
     particles = gpuArray(particles);
     param1 = gpuArray(particles(:,1));
@@ -55,8 +35,11 @@ for j=1:stepSize:time
     [particles,radii] = merge(particles,gather(radii),sphereRadius);
     toc
     %plotSphere(particles,sphereRadius);
+    %particles = gather(particles);
+    %radii = gather(radii);
 
     radius(round((j-1)/stepSize+1)) = mean(radii);
+    radius2(round((j-1)/stepSize+1)) = mean(radii(radii>100));
 end
 %{
 hold off
@@ -86,7 +69,7 @@ centers = [particles(:,1)*180*res/pi,particles(:,2)*180*res/pi];
 %fImage = drawFlatBubble(fImage,X,Y,centers,radii,res,bubbleRadius);
 %imshow(fImage);
 %toc
-plot(1:130,radius)
+plot(1:time/stepSize,radius2)
 function [particles,radii] = step(particles,radii,scale,sphereRadius,stepSize)
     diffusion = getDiff(radii);
     numParticles = length(particles);
@@ -104,7 +87,7 @@ function [particles,radii] = step(particles,radii,scale,sphereRadius,stepSize)
 end
 
 function ls = preloadls
-    layers = 20;
+    layers = 10;
     length = 3.17E-3;
     hFilm = layers*length;
     visMat = 0.052*2;
@@ -116,7 +99,7 @@ function [particlex,particley,radius] = stepGPU(particlex,particley,radius,scale
     
     %getDiff(radius);
     %%%%%%%%%%%%%%%
-    layers = 20;
+    layers = 10;
     length = 3.17E-3;
     hFilm = layers*length;
     visMat = 0.052*2;
@@ -273,37 +256,43 @@ function [particles,radii] = mergeGPU(particles,radii,sphereRadius)
     i = 1;
     while i<=numParticles       
         j=i+1;
-        dist = arrayfun(@geodesicSpherical,particles(i:end,1),particles(i:end,2),particles(i,1),particles(i,2),sphereRadius);
-        minDist = radii+radii(i);
-        merge = dist<=minDist;
-        while j<=numParticles
-            dist = geodesicSpherical(particles(i,1),particles(i,2),particles(j,1),particles(j,2),sphereRadius);
-            minDist = radii(i)+radii(j);
-            if(minDist >= dist)
-                if(particles(i,2)>3*pi/2 && particles(j,2)<pi/2)
-                    particles(i,1) = (particles(i,1)*radii(i)^2+particles(j,1)*radii(j)^2)/(radii(i)^2+radii(j)^2);
-                    particles(i,2) = (particles(i,2)*radii(i)^2+(particles(j,2)+2*pi)*radii(j)^2)/(radii(i)^2+radii(j)^2); 
-                    if (particles(i,2) > 2*pi)
-                        particles(i,2) = particles(i,2)-2*pi;
-                    end
-                elseif(particles(j,2)>3*pi/2 && particles(i,2)<pi/2)
-                    particles(i,1) = (particles(i,1)*radii(i)^2+particles(j,1)*radii(j)^2)/(radii(i)^2+radii(j)^2);
-                    particles(i,2) = ((particles(i,2)+2*pi)*radii(i)^2+particles(j,2)*radii(j)^2)/(radii(i)^2+radii(j)^2); 
-                    if (particles(i,2) > 2*pi)
-                        particles(i,2) = particles(i,2)-2*pi;
-                    end  
-                else
-                    particles(i,1) = (particles(i,1)*radii(i)^2+particles(j,1)*radii(j)^2)/(radii(i)^2+radii(j)^2);
-                    particles(i,2) = (particles(i,2)*radii(i)^2+particles(j,2)*radii(j)^2)/(radii(i)^2+radii(j)^2);
+        subset = particles(i+1:end,:);
+        numbering = gpuArray(i+1:numParticles);
+        
+        dist = arrayfun(@geodesicSpherical,subset(:,1),subset(:,2),particles(i,1),particles(i,2),sphereRadius);
+
+        minDist = radii(i+1:end)+radii(i);
+        mergeThese = dist<=minDist;
+        mergeP = subset(mergeThese,:);
+        mergeIndex = numbering(mergeThese);
+        
+        if ~isempty(mergeIndex)
+            %chosen = mergeP(1,:);
+            chosenIndex = mergeIndex(1);
+            
+            if(particles(i,2)>3*pi/2 && particles(chosenIndex,2)<pi/2)
+                particles(i,1) = (particles(i,1)*radii(i)^2+particles(chosenIndex,1)*radii(chosenIndex)^2)/(radii(i)^2+radii(chosenIndex)^2);
+                particles(i,2) = (particles(i,2)*radii(i)^2+(particles(chosenIndex,2)+2*pi)*radii(chosenIndex)^2)/(radii(i)^2+radii(chosenIndex)^2); 
+                if (particles(i,2) > 2*pi)
+                    particles(i,2) = particles(i,2)-2*pi;
                 end
-                radii(i) = sqrt(radii(i)^2+radii(j)^2);
-                particles(j,:) = [];
-                radii(j) = [];
-                numParticles = numParticles-1;
-                j=j-1;
-                
+            elseif(particles(chosenIndex,2)>3*pi/2 && particles(i,2)<pi/2)
+                particles(i,1) = (particles(i,1)*radii(i)^2+particles(chosenIndex,1)*radii(chosenIndex)^2)/(radii(i)^2+radii(chosenIndex)^2);
+                particles(i,2) = ((particles(i,2)+2*pi)*radii(i)^2+particles(chosenIndex,2)*radii(chosenIndex)^2)/(radii(i)^2+radii(chosenIndex)^2); 
+                if (particles(i,2) > 2*pi)
+                    particles(i,2) = particles(i,2)-2*pi;
+                end  
+            else
+                particles(i,1) = (particles(i,1)*radii(i)^2+particles(chosenIndex,1)*radii(chosenIndex)^2)/(radii(i)^2+radii(chosenIndex)^2);
+                particles(i,2) = (particles(i,2)*radii(i)^2+particles(chosenIndex,2)*radii(chosenIndex)^2)/(radii(i)^2+radii(chosenIndex)^2);
             end
-            j=j+1;
+            
+            radii(i) = sqrt(radii(i)^2+radii(chosenIndex)^2);
+            particles(chosenIndex,:) = [];
+            radii(chosenIndex) = [];
+            numParticles = numParticles-1;            
+       
+            
         end
         i=i+1;
     end
@@ -381,7 +370,7 @@ function plotIsland(theta,phi,radiusIsl,sphereRadius,scale)
 
 
 end
-
+%{
 
 function [a,c,dlat,dlon]=haversine(lat1,lon1,lat2,lon2)
 % HAVERSINE_FORMULA.AWK - converted from AWK 
@@ -443,5 +432,5 @@ function rad = radians(degree)
     rad = degree .* pi / 180;
 end
 
-
+%}
 
